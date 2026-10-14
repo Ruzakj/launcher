@@ -415,23 +415,37 @@ public class MainActivity extends Activity {
 
     private void startUninstall(String packageName) {
         Uri packageUri = Uri.parse("package:" + packageName);
-        Intent uninstall = new Intent(Intent.ACTION_UNINSTALL_PACKAGE, packageUri);
+
+        // Do not gate these intents behind resolveActivity(): some OEM package
+        // installers do not report themselves reliably, even though they can
+        // handle the uninstall request.
+        Intent uninstall = new Intent(Intent.ACTION_UNINSTALL_PACKAGE);
+        uninstall.setData(packageUri);
         uninstall.putExtra(Intent.EXTRA_RETURN_RESULT, true);
         try {
-            if (uninstall.resolveActivity(getPackageManager()) != null) {
-                startActivity(uninstall);
-                return;
-            }
-        } catch (Exception ignored) {}
+            startActivity(uninstall);
+            return;
+        } catch (android.content.ActivityNotFoundException | SecurityException firstError) {
+            // Fall back to the older, widely supported package-delete action.
+        } catch (Exception firstError) {
+            // Continue to the compatibility fallback below.
+        }
+
+        Intent delete = new Intent(Intent.ACTION_DELETE);
+        delete.setData(packageUri);
         try {
-            Intent delete = new Intent(Intent.ACTION_DELETE, packageUri);
-            if (delete.resolveActivity(getPackageManager()) != null) {
-                startActivity(delete);
-                return;
-            }
-        } catch (Exception ignored) {}
+            startActivity(delete);
+            return;
+        } catch (android.content.ActivityNotFoundException | SecurityException secondError) {
+            // No system uninstall handler is available.
+        } catch (Exception secondError) {
+            // No system uninstall handler is available.
+        }
+
         openAppInfo(packageName);
-        Toast.makeText(this, "Uninstall tidak tersedia; buka App info untuk opsi sistem.", Toast.LENGTH_LONG).show();
+        Toast.makeText(this,
+                "Perangkat tidak menyediakan layar uninstall. Coba App info > Uninstall.",
+                Toast.LENGTH_LONG).show();
     }
 
     private void openAppInfo(String packageName) {
