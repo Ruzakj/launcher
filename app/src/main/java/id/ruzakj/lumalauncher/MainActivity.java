@@ -19,6 +19,7 @@ import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
@@ -74,7 +75,7 @@ public class MainActivity extends Activity {
         tvMode = (getResources().getConfiguration().uiMode
                 & android.content.res.Configuration.UI_MODE_TYPE_MASK)
                 == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION;
-        columns = getResources().getConfiguration().smallestScreenWidthDp >= 600 ? 6 : 4;
+        columns = tvMode ? 6 : (getResources().getConfiguration().smallestScreenWidthDp >= 600 ? 6 : 4);
         styleSystemBars();
         if (!prefs.getBoolean(KEY_SETUP, false)) showSetupScreen();
         else showHome();
@@ -262,6 +263,7 @@ public class MainActivity extends Activity {
         TextView menu = text("•••", 18, accent, true);
         menu.setGravity(Gravity.CENTER);
         menu.setContentDescription("Launcher settings");
+        menu.setFocusable(true);
         top.addView(menu, new LinearLayout.LayoutParams(dp(44), dp(44)));
         menu.setOnClickListener(v -> showLauncherSettings());
 
@@ -282,6 +284,8 @@ public class MainActivity extends Activity {
 
         search = new EditText(this);
         search.setSingleLine(true);
+        search.setFocusable(true);
+        search.setFocusableInTouchMode(!tvMode);
         search.setTextSize(14);
         search.setTextColor(Color.WHITE);
         search.setHintTextColor(muted);
@@ -317,6 +321,10 @@ public class MainActivity extends Activity {
         appGrid = column();
         scroll.addView(appGrid);
         root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        if (tvMode) {
+            scroll.setFocusable(false);
+            scroll.setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);
+        }
 
         TextView footer = text("SIMPLE BY DESIGN", 9, Color.rgb(105, 120, 107), true);
         footer.setGravity(Gravity.CENTER);
@@ -379,6 +387,7 @@ public class MainActivity extends Activity {
         cell.setPadding(dp(2), dp(5), dp(2), 0);
         cell.setFocusable(true);
         cell.setFocusableInTouchMode(false);
+        cell.setContentDescription(app.label);
         cell.setBackground(shape(Color.TRANSPARENT, 15));
         ImageView icon = new ImageView(this);
         icon.setImageDrawable(app.icon);
@@ -394,8 +403,11 @@ public class MainActivity extends Activity {
         lp.topMargin = dp(5);
         cell.addView(label, lp);
         cell.setOnLongClickListener(v -> { showAppMenu(app); return true; });
-        cell.setOnFocusChangeListener((v, focused) ->
-                v.setBackground(shape(focused ? Color.rgb(57, 72, 53) : Color.TRANSPARENT, 15)));
+        cell.setOnFocusChangeListener((v, focused) -> {
+            v.setBackground(shape(focused ? Color.rgb(57, 72, 53) : Color.TRANSPARENT, 15));
+            if (focused && tvMode) v.setElevation(dp(4));
+            else v.setElevation(0);
+        });
         cell.setOnClickListener(v -> launchApp(app, false));
         return cell;
     }
