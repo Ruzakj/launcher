@@ -35,6 +35,8 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.Locale;
 
 public class MainActivity extends Activity {
@@ -42,6 +44,7 @@ public class MainActivity extends Activity {
     private static final String KEY_SETUP = "setup_complete";
     private static final String KEY_ACCENT = "accent_color";
     private static final String KEY_ICON_SIZE = "icon_size";
+    private static final String KEY_FAVORITES = "favorite_packages";
 
     private final int bg = Color.rgb(13, 17, 15);
     private final int panel = Color.rgb(27, 34, 29);
@@ -334,8 +337,12 @@ public class MainActivity extends Activity {
             for (AppEntry entry : apps) if (entry.pkg.equals(pkg)) { alreadyAdded = true; break; }
             if (!alreadyAdded) apps.add(new AppEntry(info.loadLabel(pm).toString(), pkg, info.loadIcon(pm)));
         }
+        final Set<String> favorites = getFavorites();
         Collections.sort(apps, new Comparator<AppEntry>() {
             public int compare(AppEntry a, AppEntry b) {
+                boolean af = favorites.contains(a.pkg);
+                boolean bf = favorites.contains(b.pkg);
+                if (af != bf) return af ? -1 : 1;
                 return a.label.compareToIgnoreCase(b.label);
             }
         });
@@ -378,7 +385,8 @@ public class MainActivity extends Activity {
         icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
         int size = tvMode ? 56 : iconSizeDp;
         cell.addView(icon, new LinearLayout.LayoutParams(dp(size), dp(size)));
-        TextView label = text(app.label, tvMode ? 12 : 10, Color.rgb(232, 237, 231), false);
+        String displayLabel = getFavorites().contains(app.pkg) ? "★ " + app.label : app.label;
+        TextView label = text(displayLabel, tvMode ? 12 : 10, Color.rgb(232, 237, 231), false);
         label.setGravity(Gravity.CENTER);
         label.setMaxLines(2);
         label.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -392,8 +400,33 @@ public class MainActivity extends Activity {
         return cell;
     }
 
+    private Set<String> getFavorites() {
+        Set<String> stored = getSharedPreferences(PREFS, MODE_PRIVATE)
+                .getStringSet(KEY_FAVORITES, null);
+        return stored == null ? new HashSet<String>() : new HashSet<String>(stored);
+    }
+
+    private void toggleFavorite(String packageName) {
+        Set<String> favorites = getFavorites();
+        boolean added;
+        if (favorites.contains(packageName)) {
+            favorites.remove(packageName);
+            added = false;
+        } else {
+            favorites.add(packageName);
+            added = true;
+        }
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putStringSet(KEY_FAVORITES, favorites).apply();
+        renderApps(search == null ? "" : search.getText().toString());
+        Toast.makeText(this, added ? "Added to favorites" : "Removed from favorites",
+                Toast.LENGTH_SHORT).show();
+    }
+
     private void showAppMenu(final AppEntry app) {
-        final String[] actions = {"Open app", "App info", "Uninstall app", "Open in split screen"};
+        final boolean isFavorite = getFavorites().contains(app.pkg);
+        final String[] actions = {"Open app", "App info", "Uninstall app", "Open in split screen",
+                isFavorite ? "Remove from favorites" : "Add to favorites"};
         new AlertDialog.Builder(this)
                 .setTitle(app.label)
                 .setItems(actions, (dialog, which) -> {
@@ -401,6 +434,7 @@ public class MainActivity extends Activity {
                     else if (which == 1) openAppInfo(app.pkg);
                     else if (which == 2) confirmUninstall(app);
                     else if (which == 3) launchApp(app, true);
+                    else if (which == 4) toggleFavorite(app.pkg);
                 }).show();
     }
 
@@ -515,6 +549,9 @@ public class MainActivity extends Activity {
                 "Appearance & icon size",
                 "Refresh app list",
                 "Display settings",
+                "Wi-Fi / Internet",
+                "Battery settings",
+                "Manage installed apps",
                 "About Luma"
         };
         new AlertDialog.Builder(this)
@@ -531,11 +568,31 @@ public class MainActivity extends Activity {
                         try { startActivity(new Intent(Settings.ACTION_DISPLAY_SETTINGS)); }
                         catch (Exception e) { Toast.makeText(this, "Display settings unavailable", Toast.LENGTH_SHORT).show(); }
                     } else if (which == 4) {
+                        openSystemSettings(new Intent(Settings.ACTION_WIFI_SETTINGS),
+                                "Wi-Fi settings unavailable");
+                    } else if (which == 5) {
+                        openSystemSettings(new Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS),
+                                "Battery settings unavailable");
+                    } else if (which == 6) {
+                        openSystemSettings(new Intent(Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS),
+                                "App management settings unavailable");
+                    } else if (which == 7) {
                         new AlertDialog.Builder(this).setTitle("Luma Launcher")
-                                .setMessage("A lightweight home screen built for focus. Long-press an app for app info, uninstall, or split-screen launch. Floating windows depend on Android and device firmware.")
+                                .setMessage("Lightweight, minimal home screen. Long-press an app to add it to favorites, open App info, uninstall, or try split screen. System shortcuts open Android settings; floating windows depend on your device firmware.")
                                 .setPositiveButton("OK", null).show();
                     }
                 }).show();
+    }
+
+    private void openSystemSettings(Intent intent, String errorMessage) {
+        try {
+            startActivity(intent);
+        } catch (Exception e) {
+            Toast.makeText(this, errorMessage, Toast.LENGTH_SHORT).show();
+            try {
+                startActivity(new Intent(Settings.ACTION_SETTINGS));
+            } catch (Exception ignored) {}
+        }
     }
 
     private void showAppearanceSettings() {
