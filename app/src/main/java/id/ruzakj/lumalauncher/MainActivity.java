@@ -200,6 +200,7 @@ public class MainActivity extends Activity {
         dbp.topMargin = dp(18);
         root.addView(defaultButton, dbp);
         defaultButton.setOnClickListener(v -> openDefaultLauncherSettings());
+        if (tvMode) root.post(() -> defaultButton.requestFocus());
 
         TextView startButton = actionButton("Continue to Luma", false);
         LinearLayout.LayoutParams sbp = new LinearLayout.LayoutParams(-1, dp(50));
@@ -243,6 +244,25 @@ public class MainActivity extends Activity {
         apps.clear();
         loadApps();
         renderApps("");
+        if (tvMode) requestInitialTvFocus();
+    }
+
+    private void requestInitialTvFocus() {
+        if (appGrid == null) return;
+        appGrid.post(() -> {
+            if (!tvMode || appGrid == null) return;
+            for (int i = 0; i < appGrid.getChildCount(); i++) {
+                View child = appGrid.getChildAt(i);
+                if (child instanceof ViewGroup) {
+                    ViewGroup row = (ViewGroup) child;
+                    for (int j = 0; j < row.getChildCount(); j++) {
+                        View cell = row.getChildAt(j);
+                        if (cell.isFocusable() && cell.requestFocus()) return;
+                    }
+                }
+            }
+            if (search != null) search.requestFocus();
+        });
     }
 
     private void buildHome() {
@@ -250,6 +270,7 @@ public class MainActivity extends Activity {
         root.setPadding(dp(22), dp(18), dp(22), dp(12));
         root.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR,
                 new int[]{Color.rgb(26, 37, 28), bg, Color.rgb(10, 13, 11)}));
+        if (tvMode) root.setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);
         setContentView(root);
 
         LinearLayout top = new LinearLayout(this);
