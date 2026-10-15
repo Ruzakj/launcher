@@ -10,6 +10,8 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Handler;
+import android.os.Looper;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -60,6 +62,21 @@ public class MainActivity extends Activity {
     private List<AppEntry> apps = new ArrayList<>();
     private int columns = 4;
     private boolean tvMode;
+    private TextView homeClock;
+    private TextView homeDate;
+    private final Handler clockHandler = new Handler(Looper.getMainLooper());
+    private final Runnable clockUpdater = new Runnable() {
+        @Override public void run() {
+            if (homeClock != null) {
+                homeClock.setText(new SimpleDateFormat("HH:mm", Locale.getDefault()).format(new Date()));
+            }
+            if (homeDate != null) {
+                homeDate.setText(new SimpleDateFormat("EEE, d MMM", Locale.getDefault())
+                        .format(new Date()).toUpperCase(Locale.getDefault()));
+            }
+            clockHandler.postDelayed(this, 15_000L);
+        }
+    };
 
     private static class AppEntry {
         String label, pkg;
@@ -293,9 +310,9 @@ public class MainActivity extends Activity {
         TextView brand = text("luma.", 23, Color.WHITE, true);
         brand.setLetterSpacing(-0.02f);
         top.addView(brand, new LinearLayout.LayoutParams(0, dp(44), 1));
-        TextView date = text(new SimpleDateFormat("EEE, d MMM", Locale.getDefault())
+        homeDate = text(new SimpleDateFormat("EEE, d MMM", Locale.getDefault())
                 .format(new Date()).toUpperCase(Locale.getDefault()), 10, muted, true);
-        top.addView(date);
+        top.addView(homeDate);
         TextView menu = text("•••", 18, accent, true);
         menu.setGravity(Gravity.CENTER);
         menu.setContentDescription("Launcher settings");
@@ -308,12 +325,12 @@ public class MainActivity extends Activity {
         TextView eyebrow = text("MAKE ROOM FOR WHAT MATTERS", 10, accent, true);
         eyebrow.setLetterSpacing(0.12f);
         hero.addView(eyebrow);
-        TextView clock = text(new SimpleDateFormat("HH:mm", Locale.getDefault()).format(new Date()),
+        homeClock = text(new SimpleDateFormat("HH:mm", Locale.getDefault()).format(new Date()),
                 58, Color.WHITE, false);
-        clock.setTypeface(Typeface.create("sans-serif-light", Typeface.NORMAL));
+        homeClock.setTypeface(Typeface.create("sans-serif-light", Typeface.NORMAL));
         LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-1, dp(70));
         clp.topMargin = dp(3);
-        hero.addView(clock, clp);
+        hero.addView(homeClock, clp);
         TextView subtitle = text("Less noise. More focus.", 14, muted, false);
         hero.addView(subtitle);
         root.addView(hero);
@@ -429,8 +446,13 @@ public class MainActivity extends Activity {
         cell.setBackground(shape(Color.TRANSPARENT, 15));
         ImageView icon = new ImageView(this);
         icon.setImageDrawable(app.icon);
-        icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        icon.setScaleType(ImageView.ScaleType.CENTER_CROP);
         int size = tvMode ? 56 : iconSizeDp;
+        GradientDrawable circularMask = new GradientDrawable();
+        circularMask.setShape(GradientDrawable.OVAL);
+        circularMask.setColor(Color.TRANSPARENT);
+        icon.setBackground(circularMask);
+        icon.setClipToOutline(true);
         cell.addView(icon, new LinearLayout.LayoutParams(dp(size), dp(size)));
         String displayLabel = getFavorites().contains(app.pkg) ? "★ " + app.label : app.label;
         TextView label = text(displayLabel, tvMode ? 12 : 10, Color.rgb(232, 237, 231), false);
@@ -766,11 +788,18 @@ public class MainActivity extends Activity {
 
     @Override public void onResume() {
         super.onResume();
-        if (appGrid != null) {
-            apps.clear();
-            loadApps();
-            renderApps(search == null ? "" : search.getText().toString());
+        if (homeClock != null) {
+            clockHandler.removeCallbacks(clockUpdater);
+            clockUpdater.run();
         }
+        // Keep the already-loaded app grid while returning from another app.
+        // Querying PackageManager and loading every app icon synchronously here
+        // can make the launcher visibly freeze on slower TV hardware.
+    }
+
+    @Override public void onPause() {
+        clockHandler.removeCallbacks(clockUpdater);
+        super.onPause();
     }
 
 
