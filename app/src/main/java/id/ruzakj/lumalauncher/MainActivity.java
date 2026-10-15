@@ -778,14 +778,9 @@ public class MainActivity extends Activity {
         if (tvMode && event.getAction() == android.view.KeyEvent.ACTION_DOWN) {
             int key = event.getKeyCode();
             View current = getCurrentFocus();
-            if (key == android.view.KeyEvent.KEYCODE_DPAD_CENTER
-                    || key == android.view.KeyEvent.KEYCODE_ENTER
-                    || key == android.view.KeyEvent.KEYCODE_NUMPAD_ENTER) {
-                if (current != null && current.isClickable()) {
-                    current.performClick();
-                    return true;
-                }
-            }
+            // Let Android dispatch OK/Enter to the focused View. Calling performClick()
+            // directly on ACTION_DOWN bypasses the framework's long-press detection,
+            // causing a held remote OK button to launch apps immediately.
             if (key == android.view.KeyEvent.KEYCODE_DPAD_UP
                     || key == android.view.KeyEvent.KEYCODE_DPAD_DOWN
                     || key == android.view.KeyEvent.KEYCODE_DPAD_LEFT
