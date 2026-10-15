@@ -6,8 +6,9 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 
 /**
- * Best-effort fallback for TV firmware that does not restore its selected
- * Home activity automatically after a full reboot.
+ * Boot-time launcher entry point for iFFALCON/TCL TV+ firmware.
+ * Launches Luma explicitly as a HOME activity so the TV shell can treat it
+ * like the selected launcher instead of an ordinary app task.
  */
 public class LaunchOnBootReceiver extends BroadcastReceiver {
     @Override public void onReceive(Context context, Intent intent) {
@@ -21,13 +22,17 @@ public class LaunchOnBootReceiver extends BroadcastReceiver {
         SharedPreferences prefs = context.getSharedPreferences("luma_preferences", Context.MODE_PRIVATE);
         if (!prefs.getBoolean("auto_start_luma", true)) return;
 
-        Intent launch = new Intent(context, MainActivity.class);
-        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        Intent launch = new Intent(Intent.ACTION_MAIN);
+        launch.addCategory(Intent.CATEGORY_HOME);
+        launch.setClass(context, MainActivity.class);
+        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                | Intent.FLAG_ACTIVITY_CLEAR_TOP
+                | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         try {
             context.startActivity(launch);
         } catch (Exception ignored) {
-            // Some newer Android/OEM builds block background activity launches.
-            // The default HOME role remains the supported way to open the launcher.
+            // If this firmware blocks boot-time launches, the HOME default remains
+            // the fallback handled by the TV system.
         }
     }
 }
