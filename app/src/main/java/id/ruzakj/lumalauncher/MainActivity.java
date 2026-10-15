@@ -127,6 +127,13 @@ public class MainActivity extends Activity {
         b.setPadding(dp(16), dp(14), dp(16), dp(14));
         b.setBackground(shape(primary ? accent : panelRaised, 16));
         b.setFocusable(true);
+        b.setFocusableInTouchMode(true);
+        if (tvMode) {
+            b.setOnFocusChangeListener((v, focused) -> {
+                v.setBackground(shape(focused ? Color.rgb(218, 255, 169) : (primary ? accent : panelRaised), 16));
+                b.setTextColor(focused ? Color.rgb(13, 17, 15) : (primary ? bg : Color.WHITE));
+            });
+        }
         return b;
     }
 
@@ -200,7 +207,10 @@ public class MainActivity extends Activity {
         dbp.topMargin = dp(18);
         root.addView(defaultButton, dbp);
         defaultButton.setOnClickListener(v -> openDefaultLauncherSettings());
-        if (tvMode) root.post(() -> defaultButton.requestFocus());
+        if (tvMode) root.post(() -> {
+            defaultButton.setFocusableInTouchMode(true);
+            defaultButton.requestFocus();
+        });
 
         TextView startButton = actionButton("Continue to Luma", false);
         LinearLayout.LayoutParams sbp = new LinearLayout.LayoutParams(-1, dp(50));
@@ -223,6 +233,9 @@ public class MainActivity extends Activity {
         chip.setPadding(dp(11), 0, dp(11), 0);
         chip.setBackground(shape(panelRaised, 12));
         chip.setFocusable(true);
+        chip.setFocusableInTouchMode(true);
+        if (tvMode) chip.setOnFocusChangeListener((v, focused) ->
+                v.setBackground(shape(focused ? Color.rgb(57, 72, 53) : panelRaised, 12)));
         return chip;
     }
 
@@ -663,6 +676,58 @@ public class MainActivity extends Activity {
             loadApps();
             renderApps(search == null ? "" : search.getText().toString());
         }
+    }
+
+
+    @Override public boolean dispatchKeyEvent(android.view.KeyEvent event) {
+        if (tvMode && event.getAction() == android.view.KeyEvent.ACTION_DOWN) {
+            int key = event.getKeyCode();
+            View current = getCurrentFocus();
+            if (key == android.view.KeyEvent.KEYCODE_DPAD_CENTER
+                    || key == android.view.KeyEvent.KEYCODE_ENTER
+                    || key == android.view.KeyEvent.KEYCODE_NUMPAD_ENTER) {
+                if (current != null && current.isClickable()) {
+                    current.performClick();
+                    return true;
+                }
+            }
+            if (key == android.view.KeyEvent.KEYCODE_DPAD_UP
+                    || key == android.view.KeyEvent.KEYCODE_DPAD_DOWN
+                    || key == android.view.KeyEvent.KEYCODE_DPAD_LEFT
+                    || key == android.view.KeyEvent.KEYCODE_DPAD_RIGHT) {
+                if (current == null || !current.isFocused()) {
+                    View target = findViewById(android.R.id.content);
+                    if (target instanceof ViewGroup) {
+                        View focusable = findFirstFocusable((ViewGroup) target);
+                        if (focusable != null) {
+                            focusable.requestFocus();
+                            return true;
+                        }
+                    }
+                }
+                if (current != null) {
+                    int direction = key == android.view.KeyEvent.KEYCODE_DPAD_UP
+                            ? View.FOCUS_UP : key == android.view.KeyEvent.KEYCODE_DPAD_DOWN
+                            ? View.FOCUS_DOWN : key == android.view.KeyEvent.KEYCODE_DPAD_LEFT
+                            ? View.FOCUS_LEFT : View.FOCUS_RIGHT;
+                    View next = current.focusSearch(direction);
+                    if (next != null && next.requestFocus()) return true;
+                }
+            }
+        }
+        return super.dispatchKeyEvent(event);
+    }
+
+    private View findFirstFocusable(ViewGroup group) {
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View child = group.getChildAt(i);
+            if (child.isFocusable() && child.getVisibility() == View.VISIBLE) return child;
+            if (child instanceof ViewGroup) {
+                View nested = findFirstFocusable((ViewGroup) child);
+                if (nested != null) return nested;
+            }
+        }
+        return null;
     }
 
     @Override public void onBackPressed() {
