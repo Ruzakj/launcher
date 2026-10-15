@@ -46,6 +46,7 @@ public class MainActivity extends Activity {
     private static final String KEY_ACCENT = "accent_color";
     private static final String KEY_ICON_SIZE = "icon_size";
     private static final String KEY_FAVORITES = "favorite_packages";
+    private static final String KEY_AUTO_START = "auto_start_luma";
 
     private final int bg = Color.rgb(13, 17, 15);
     private final int panel = Color.rgb(27, 34, 29);
@@ -598,7 +599,8 @@ public class MainActivity extends Activity {
                 "Wi-Fi / Internet",
                 "Battery settings",
                 "Manage installed apps",
-                "About Luma"
+                "About Luma",
+                "Startup & Home button"
         };
         new AlertDialog.Builder(this)
                 .setTitle("Luma settings")
@@ -625,6 +627,42 @@ public class MainActivity extends Activity {
                     } else if (which == 7) {
                         new AlertDialog.Builder(this).setTitle("Luma Launcher")
                                 .setMessage("Lightweight, minimal home screen. Long-press an app to add it to favorites, open App info, uninstall, or try split screen. System shortcuts open Android settings; floating windows depend on your device firmware.")
+                                .setPositiveButton("OK", null).show();
+                    } else if (which == 8) {
+                        showStartupSettings();
+                    }
+                }).show();
+    }
+
+    private void showStartupSettings() {
+        boolean autoStart = getSharedPreferences(PREFS, MODE_PRIVATE)
+                .getBoolean(KEY_AUTO_START, true);
+        final String autoLabel = autoStart
+                ? "Turn off launch after TV startup"
+                : "Turn on launch after TV startup";
+        final String[] options = {
+                autoLabel,
+                "Configure Home button / default launcher",
+                "How the Home button works"
+        };
+        new AlertDialog.Builder(this)
+                .setTitle("Startup & Home button")
+                .setItems(options, (dialog, which) -> {
+                    if (which == 0) {
+                        boolean enabled = !getSharedPreferences(PREFS, MODE_PRIVATE)
+                                .getBoolean(KEY_AUTO_START, true);
+                        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                                .putBoolean(KEY_AUTO_START, enabled).apply();
+                        Toast.makeText(this, enabled
+                                ? "Auto-start after TV startup enabled"
+                                : "Auto-start after TV startup disabled",
+                                Toast.LENGTH_LONG).show();
+                    } else if (which == 1) {
+                        openDefaultLauncherSettings();
+                    } else if (which == 2) {
+                        new AlertDialog.Builder(this)
+                                .setTitle("Home button")
+                                .setMessage("The Home button is controlled by the TV system, not by ordinary apps. Select Luma Launcher as the default Home app in system settings; then pressing the house button should return to Luma. The startup option is a fallback for TV firmware that does not reopen the selected Home app after a restart.")
                                 .setPositiveButton("OK", null).show();
                     }
                 }).show();
