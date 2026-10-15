@@ -47,6 +47,7 @@ public class MainActivity extends Activity {
     private static final String KEY_ICON_SIZE = "icon_size";
     private static final String KEY_FAVORITES = "favorite_packages";
     private static final String KEY_AUTO_START = "auto_start_luma";
+    private static final String KEY_HIDDEN_APPS = "hidden_packages";
 
     private final int bg = Color.rgb(13, 17, 15);
     private final int panel = Color.rgb(27, 34, 29);
@@ -397,7 +398,9 @@ public class MainActivity extends Activity {
         String q = filter == null ? "" : filter.trim().toLowerCase(Locale.getDefault());
         int matches = 0;
         LinearLayout row = null;
+        Set<String> hidden = getHiddenApps();
         for (AppEntry app : apps) {
+            if (hidden.contains(app.pkg)) continue;
             if (!app.label.toLowerCase(Locale.getDefault()).contains(q)) continue;
             if (matches % columns == 0) {
                 row = new LinearLayout(this);
@@ -453,6 +456,49 @@ public class MainActivity extends Activity {
         return stored == null ? new HashSet<String>() : new HashSet<String>(stored);
     }
 
+    private Set<String> getHiddenApps() {
+        Set<String> stored = getSharedPreferences(PREFS, MODE_PRIVATE)
+                .getStringSet(KEY_HIDDEN_APPS, null);
+        return stored == null ? new HashSet<String>() : new HashSet<String>(stored);
+    }
+
+    private void setAppHidden(String packageName, boolean hidden) {
+        Set<String> hiddenApps = getHiddenApps();
+        if (hidden) hiddenApps.add(packageName);
+        else hiddenApps.remove(packageName);
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putStringSet(KEY_HIDDEN_APPS, hiddenApps).apply();
+        renderApps(search == null ? "" : search.getText().toString());
+    }
+
+    private void showHiddenAppsSettings() {
+        final String[] labels = new String[apps.size()];
+        final boolean[] checked = new boolean[apps.size()];
+        final Set<String> hidden = getHiddenApps();
+        for (int i = 0; i < apps.size(); i++) {
+            labels[i] = apps.get(i).label;
+            checked[i] = hidden.contains(apps.get(i).pkg);
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("Hide apps")
+                .setMultiChoiceItems(labels, checked, (dialog, which, isChecked) -> {
+                    String packageName = apps.get(which).pkg;
+                    Set<String> current = getHiddenApps();
+                    if (isChecked) current.add(packageName);
+                    else current.remove(packageName);
+                    getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                            .putStringSet(KEY_HIDDEN_APPS, current).apply();
+                })
+                .setPositiveButton("Done", (dialog, which) ->
+                        renderApps(search == null ? "" : search.getText().toString()))
+                .setNeutralButton("Show all", (dialog, which) -> {
+                    getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                            .putStringSet(KEY_HIDDEN_APPS, new HashSet<String>()).apply();
+                    renderApps(search == null ? "" : search.getText().toString());
+                })
+                .show();
+    }
+
     private void toggleFavorite(String packageName) {
         Set<String> favorites = getFavorites();
         boolean added;
@@ -472,8 +518,10 @@ public class MainActivity extends Activity {
 
     private void showAppMenu(final AppEntry app) {
         final boolean isFavorite = getFavorites().contains(app.pkg);
+        final boolean isHidden = getHiddenApps().contains(app.pkg);
         final String[] actions = {"Open app", "App info", "Uninstall app", "Open in split screen",
-                isFavorite ? "Remove from favorites" : "Add to favorites"};
+                isFavorite ? "Remove from favorites" : "Add to favorites",
+                isHidden ? "Show app in launcher" : "Hide app from launcher"};
         new AlertDialog.Builder(this)
                 .setTitle(app.label)
                 .setItems(actions, (dialog, which) -> {
@@ -482,6 +530,12 @@ public class MainActivity extends Activity {
                     else if (which == 2) confirmUninstall(app);
                     else if (which == 3) launchApp(app, true);
                     else if (which == 4) toggleFavorite(app.pkg);
+                    else if (which == 5) {
+                        setAppHidden(app.pkg, !getHiddenApps().contains(app.pkg));
+                        Toast.makeText(this, getHiddenApps().contains(app.pkg)
+                                ? app.label + " hidden from Luma"
+                                : app.label + " visible in Luma", Toast.LENGTH_SHORT).show();
+                    }
                 }).show();
     }
 
@@ -600,7 +654,8 @@ public class MainActivity extends Activity {
                 "Battery settings",
                 "Manage installed apps",
                 "About Luma",
-                "Startup & Home button"
+                "Startup & Home button",
+                "Hide / show apps"
         };
         new AlertDialog.Builder(this)
                 .setTitle("Luma settings")
@@ -630,6 +685,8 @@ public class MainActivity extends Activity {
                                 .setPositiveButton("OK", null).show();
                     } else if (which == 8) {
                         showStartupSettings();
+                    } else if (which == 9) {
+                        showHiddenAppsSettings();
                     }
                 }).show();
     }
