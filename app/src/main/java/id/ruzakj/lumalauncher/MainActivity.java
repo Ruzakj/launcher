@@ -8,6 +8,7 @@ import android.content.BroadcastReceiver;
 import android.content.IntentFilter;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.drawable.BitmapDrawable;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
@@ -58,6 +59,7 @@ public class MainActivity extends Activity {
     private static final String KEY_HERO_URI = "hero_image_uri";
     private static final String KEY_HERO_FADE = "hero_image_fade";
     private ImageView heroPhoto;
+    private View homeHeroOverlay;
     private boolean favoritesOnly = false;
 
     private final int bg = Color.rgb(13, 17, 15);
@@ -343,8 +345,23 @@ public class MainActivity extends Activity {
         top.addView(menu, new LinearLayout.LayoutParams(dp(44), dp(44)));
         menu.setOnClickListener(v -> showLauncherSettings());
 
+        FrameLayout heroBackdrop = new FrameLayout(this);
+        LinearLayout.LayoutParams heroBackdropParams = new LinearLayout.LayoutParams(-1, dp(244));
+        heroBackdropParams.topMargin = dp(8);
+        heroBackdropParams.bottomMargin = dp(12);
+        heroBackdrop = heroBackdrop;
+        ImageView heroBackgroundImage = new ImageView(this);
+        heroBackgroundImage.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        heroBackgroundImage.setBackground(shape(panel, 20));
+        heroBackdrop.addView(heroBackgroundImage, new FrameLayout.LayoutParams(-1, -1));
+        heroPhoto = heroBackgroundImage;
+        homeHeroOverlay = new View(this);
+        heroBackdrop.addView(homeHeroOverlay, new FrameLayout.LayoutParams(-1, -1));
         LinearLayout hero = column();
         hero.setPadding(0, dp(27), 0, dp(22));
+        FrameLayout.LayoutParams heroTextParams = new FrameLayout.LayoutParams(-1, -1);
+        heroTextParams.leftMargin = dp(0);
+        heroBackdrop.addView(hero, heroTextParams);
         TextView eyebrow = text("MAKE ROOM FOR WHAT MATTERS", 10, accent, true);
         eyebrow.setLetterSpacing(0.12f);
         hero.addView(eyebrow);
@@ -356,22 +373,12 @@ public class MainActivity extends Activity {
         hero.addView(homeClock, clp);
         TextView subtitle = text("Less noise. More focus.", 14, muted, false);
         hero.addView(subtitle);
-        root.addView(hero);
-
-        LinearLayout photoFrame = new LinearLayout(this);
-        photoFrame.setGravity(Gravity.CENTER);
-        photoFrame.setBackground(shape(panel, 20));
-        heroPhoto = new ImageView(this);
-        heroPhoto.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        photoFrame.addView(heroPhoto, new LinearLayout.LayoutParams(-1, -1));
-        LinearLayout.LayoutParams photoParams = new LinearLayout.LayoutParams(-1, dp(138));
-        photoParams.bottomMargin = dp(14);
-        root.addView(photoFrame, photoParams);
+        root.addView(heroBackdrop, heroBackdropParams);
         loadHeroPhoto();
-        photoFrame.setOnClickListener(v -> chooseHeroPhoto());
-        photoFrame.setOnLongClickListener(v -> { showHeroPhotoOptions(); return true; });
-        photoFrame.setFocusable(true);
-        photoFrame.setContentDescription("Personal banner photo; click to choose, long press for options");
+        heroBackdrop.setOnClickListener(v -> chooseHeroPhoto());
+        heroBackdrop.setOnLongClickListener(v -> { showHeroPhotoOptions(); return true; });
+        heroBackdrop.setFocusable(true);
+        heroBackdrop.setContentDescription("Home background photo; click to choose, long press for options");
 
         search = new EditText(this);
         search.setSingleLine(true);
@@ -934,11 +941,13 @@ public class MainActivity extends Activity {
         try {
             heroPhoto.setImageURI(null);
             heroPhoto.setImageURI(Uri.parse(value));
-            heroPhoto.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            heroPhoto.setScaleType(ImageView.ScaleType.CENTER_CROP);
             int fade = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_HERO_FADE, 45);
-            heroPhoto.setImageAlpha(255);
-            heroPhoto.setForeground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                    new int[]{Color.argb(5, 13, 17, 15), Color.argb(fade * 255 / 100, 13, 17, 15)}));
+            if (homeHeroOverlay != null) {
+                homeHeroOverlay.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                        new int[]{Color.argb(fade * 255 / 100, 13, 17, 15),
+                                  Color.argb(Math.min(245, fade * 255 / 100 + 65), 13, 17, 15)}));
+            }
         } catch (Exception e) { heroPhoto.setImageDrawable(null); }
     }
 
