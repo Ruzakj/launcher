@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
+import android.content.BroadcastReceiver;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
@@ -62,6 +64,14 @@ public class MainActivity extends Activity {
     private List<AppEntry> apps = new ArrayList<>();
     private int columns = 4;
     private boolean tvMode;
+    private boolean pendingPackageRefresh;
+    private boolean packageReceiverRegistered;
+    private final BroadcastReceiver packageReceiver = new BroadcastReceiver() {
+        @Override public void onReceive(Context context, Intent intent) {
+            pendingPackageRefresh = true;
+            refreshAppsAfterPackageChange();
+        }
+    };
     private TextView homeClock;
     private TextView homeDate;
     private final Handler clockHandler = new Handler(Looper.getMainLooper());
@@ -572,37 +582,65 @@ public class MainActivity extends Activity {
 
     private void startUninstall(String packageName) {
         Uri packageUri = Uri.parse("package:" + packageName);
+        pendingPackageRefresh = true;
 
-        // Do not gate these intents behind resolveActivity(): some OEM package
-        // installers do not report themselves reliably, even though they can
-        // handle the uninstall request.
+        // ACTION_DELETE is more compatible with older Android TV firmware.
+        Intent delete = new Intent(Intent.ACTION_DELETE, packageUri);
+        try {
+            startActivity(delete);
+            return;
+        } catch (Exception firstError) {
+            // Try the newer uninstall action if this firmware has a handler.
+        }
+
         Intent uninstall = new Intent(Intent.ACTION_UNINSTALL_PACKAGE);
         uninstall.setData(packageUri);
         uninstall.putExtra(Intent.EXTRA_RETURN_RESULT, true);
         try {
             startActivity(uninstall);
             return;
-        } catch (android.content.ActivityNotFoundException | SecurityException firstError) {
-            // Fall back to the older, widely supported package-delete action.
-        } catch (Exception firstError) {
-            // Continue to the compatibility fallback below.
-        }
-
-        Intent delete = new Intent(Intent.ACTION_DELETE);
-        delete.setData(packageUri);
-        try {
-            startActivity(delete);
-            return;
-        } catch (android.content.ActivityNotFoundException | SecurityException secondError) {
-            // No system uninstall handler is available.
         } catch (Exception secondError) {
-            // No system uninstall handler is available.
+            pendingPackageRefresh = false;
+            openAppInfo(packageName);
+            Toast.makeText(this,
+                    "Layar uninstall tidak tersedia. Di App info, pilih Uninstall.",
+                    Toast.LENGTH_LONG).show();
         }
+    }
 
-        openAppInfo(packageName);
-        Toast.makeText(this,
-                "Perangkat tidak menyediakan layar uninstall. Coba App info > Uninstall.",
-                Toast.LENGTH_LONG).show();
+    private void refreshAppsAfterPackageChange() {
+        if (appGrid == null || !pendingPackageRefresh) return;
+        appGrid.post(() -> {
+            if (!pendingPackageRefresh || isFinishing()) return;
+            pendingPackageRefresh = false;
+            String filter = search == null ? "" : search.getText().toString();
+            apps.clear();
+            loadApps();
+            renderApps(filter);
+        });
+    }
+
+    private void registerPackageReceiver() {
+        if (packageReceiverRegistered) return;
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(Intent.ACTION_PACKAGE_REMOVED);
+        filter.addAction(Intent.ACTION_PACKAGE_ADDED);
+        filter.addAction(Intent.ACTION_PACKAGE_CHANGED);
+        filter.addDataScheme("package");
+        try {
+            if (Build.VERSION.SDK_INT >= 33) {
+                registerReceiver(packageReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+            } else {
+                registerReceiver(packageReceiver, filter);
+            }
+            packageReceiverRegistered = true;
+        } catch (Exception ignored) {}
+    }
+
+    private void unregisterPackageReceiver() {
+        if (!packageReceiverRegistered) return;
+        try { unregisterReceiver(packageReceiver); } catch (Exception ignored) {}
+        packageReceiverRegistered = false;
     }
 
     private void openAppInfo(String packageName) {
@@ -788,17 +826,18 @@ public class MainActivity extends Activity {
 
     @Override public void onResume() {
         super.onResume();
+        registerPackageReceiver();
         if (homeClock != null) {
             clockHandler.removeCallbacks(clockUpdater);
             clockUpdater.run();
         }
-        // Keep the already-loaded app grid while returning from another app.
-        // Querying PackageManager and loading every app icon synchronously here
-        // can make the launcher visibly freeze on slower TV hardware.
+        // Refresh only when a package change is pending, not on every resume.
+        refreshAppsAfterPackageChange();
     }
 
     @Override public void onPause() {
         clockHandler.removeCallbacks(clockUpdater);
+        unregisterPackageReceiver();
         super.onPause();
     }
 
