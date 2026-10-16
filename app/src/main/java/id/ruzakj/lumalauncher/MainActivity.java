@@ -30,6 +30,7 @@ import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupMenu;
@@ -349,7 +350,6 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams heroBackdropParams = new LinearLayout.LayoutParams(-1, dp(244));
         heroBackdropParams.topMargin = dp(8);
         heroBackdropParams.bottomMargin = dp(12);
-        heroBackdrop = heroBackdrop;
         ImageView heroBackgroundImage = new ImageView(this);
         heroBackgroundImage.setScaleType(ImageView.ScaleType.CENTER_CROP);
         heroBackgroundImage.setBackground(shape(panel, 20));
