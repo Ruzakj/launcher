@@ -52,6 +52,8 @@ public class MainActivity extends Activity {
     private static final String KEY_FAVORITES = "favorite_packages";
     private static final String KEY_AUTO_START = "auto_start_luma";
     private static final String KEY_HIDDEN_APPS = "hidden_packages";
+    private static final String KEY_COLUMNS = "app_columns";
+    private boolean favoritesOnly = false;
 
     private final int bg = Color.rgb(13, 17, 15);
     private final int panel = Color.rgb(27, 34, 29);
@@ -104,7 +106,7 @@ public class MainActivity extends Activity {
         tvMode = (getResources().getConfiguration().uiMode
                 & android.content.res.Configuration.UI_MODE_TYPE_MASK)
                 == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION;
-        columns = tvMode ? 6 : (getResources().getConfiguration().smallestScreenWidthDp >= 600 ? 6 : 4);
+        columns = prefs.getInt(KEY_COLUMNS, tvMode ? 6 : (getResources().getConfiguration().smallestScreenWidthDp >= 600 ? 6 : 4));
         styleSystemBars();
         if (!prefs.getBoolean(KEY_SETUP, false)) showSetupScreen();
         else showHome();
@@ -323,6 +325,11 @@ public class MainActivity extends Activity {
         homeDate = text(new SimpleDateFormat("EEE, d MMM", Locale.getDefault())
                 .format(new Date()).toUpperCase(Locale.getDefault()), 10, muted, true);
         top.addView(homeDate);
+        TextView drawerButton = actionButton("Apps", false);
+        LinearLayout.LayoutParams drawerButtonParams = new LinearLayout.LayoutParams(-2, dp(38));
+        drawerButtonParams.rightMargin = dp(8);
+        top.addView(drawerButton, drawerButtonParams);
+        drawerButton.setOnClickListener(v -> showAppDrawer());
         TextView menu = text("•••", 18, accent, true);
         menu.setGravity(Gravity.CENTER);
         menu.setContentDescription("Launcher settings");
@@ -428,6 +435,7 @@ public class MainActivity extends Activity {
         Set<String> hidden = getHiddenApps();
         for (AppEntry app : apps) {
             if (hidden.contains(app.pkg)) continue;
+            if (favoritesOnly && !getFavorites().contains(app.pkg)) continue;
             if (!app.label.toLowerCase(Locale.getDefault()).contains(q)) continue;
             if (matches % columns == 0) {
                 row = new LinearLayout(this);
@@ -796,16 +804,98 @@ public class MainActivity extends Activity {
         }
     }
 
+
+    private void showAppDrawer() {
+        favoritesOnly = false;
+        LinearLayout root = column();
+        root.setPadding(dp(22), dp(18), dp(22), dp(12));
+        root.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                new int[]{Color.rgb(26, 37, 28), bg, Color.rgb(10, 13, 11)}));
+        if (tvMode) root.setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);
+        setContentView(root);
+
+        LinearLayout header = new LinearLayout(this);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        TextView back = actionButton("← Home", false);
+        header.addView(back, new LinearLayout.LayoutParams(-2, dp(42)));
+        back.setOnClickListener(v -> showHome());
+        TextView heading = text("App drawer", 24, Color.WHITE, true);
+        heading.setPadding(dp(16), 0, 0, 0);
+        header.addView(heading, new LinearLayout.LayoutParams(0, dp(48), 1));
+        root.addView(header);
+
+        EditText drawerSearch = new EditText(this);
+        drawerSearch.setSingleLine(true);
+        drawerSearch.setFocusable(true);
+        drawerSearch.setFocusableInTouchMode(!tvMode);
+        drawerSearch.setTextSize(14);
+        drawerSearch.setTextColor(Color.WHITE);
+        drawerSearch.setHintTextColor(muted);
+        drawerSearch.setHint(tvMode ? "Search apps with remote" : "Search installed apps");
+        drawerSearch.setPadding(dp(16), 0, dp(16), 0);
+        drawerSearch.setBackground(shape(panel, 17));
+        LinearLayout.LayoutParams searchParams = new LinearLayout.LayoutParams(-1, dp(50));
+        searchParams.topMargin = dp(12);
+        root.addView(drawerSearch, searchParams);
+
+        LinearLayout filters = new LinearLayout(this);
+        filters.setGravity(Gravity.CENTER_VERTICAL);
+        filters.setPadding(0, dp(10), 0, dp(8));
+        TextView all = actionButton("All apps", true);
+        TextView fav = actionButton("Favorites", false);
+        filters.addView(all, new LinearLayout.LayoutParams(-2, dp(38)));
+        LinearLayout.LayoutParams favParams = new LinearLayout.LayoutParams(-2, dp(38));
+        favParams.leftMargin = dp(8);
+        filters.addView(fav, favParams);
+        root.addView(filters);
+        all.setOnClickListener(v -> {
+            favoritesOnly = false;
+            all.setBackground(shape(accent, 16));
+            fav.setBackground(shape(panelRaised, 16));
+            renderApps(drawerSearch.getText().toString());
+        });
+        fav.setOnClickListener(v -> {
+            favoritesOnly = true;
+            fav.setBackground(shape(accent, 16));
+            all.setBackground(shape(panelRaised, 16));
+            renderApps(drawerSearch.getText().toString());
+        });
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(false);
+        scroll.setClipToPadding(false);
+        appGrid = column();
+        scroll.addView(appGrid);
+        root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        drawerSearch.addTextChangedListener(new TextWatcher() {
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                renderApps(s.toString());
+            }
+            public void afterTextChanged(Editable e) {}
+        });
+        renderApps("");
+        if (tvMode) drawerSearch.post(() -> {
+            if (appGrid != null) requestInitialTvFocus();
+        });
+    }
+
     private void showAppearanceSettings() {
-        final String[] options = {"Accent: Lime", "Accent: Blue", "Icons: Compact", "Icons: Comfortable", "Run setup again"};
+        final String[] options = {"Accent: Lime", "Accent: Blue", "Accent: Purple", "Accent: Orange", "Icons: Compact", "Icons: Comfortable", "Icons: Large", "Grid: 4 columns", "Grid: 5 columns", "Grid: 6 columns", "Grid: 7 columns", "Run setup again"};
         new AlertDialog.Builder(this)
                 .setTitle("Appearance")
                 .setItems(options, (dialog, which) -> {
                     if (which == 0) saveAccent(Color.rgb(190, 244, 111));
                     else if (which == 1) saveAccent(Color.rgb(130, 190, 255));
-                    else if (which == 2) saveIconSize(36);
-                    else if (which == 3) saveIconSize(44);
-                    else {
+                    else if (which == 2) saveAccent(Color.rgb(190, 140, 255));
+                    else if (which == 3) saveAccent(Color.rgb(255, 171, 105));
+                    else if (which == 4) saveIconSize(36);
+                    else if (which == 5) saveIconSize(44);
+                    else if (which == 6) saveIconSize(52);
+                    else if (which >= 7 && which <= 10) {
+                        columns = which - 3;
+                        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(KEY_COLUMNS, columns).apply();
+                    } else {
                         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_SETUP, false).apply();
                         showSetupScreen();
                         return;
