@@ -283,6 +283,7 @@ public class MainActivity extends Activity {
     }
 
     private void showHome() {
+        favoritesOnly = false;
         styleSystemBars();
         buildHome();
         apps.clear();
