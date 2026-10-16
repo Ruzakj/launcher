@@ -6,6 +6,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.BroadcastReceiver;
 import android.content.IntentFilter;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
@@ -53,6 +55,9 @@ public class MainActivity extends Activity {
     private static final String KEY_AUTO_START = "auto_start_luma";
     private static final String KEY_HIDDEN_APPS = "hidden_packages";
     private static final String KEY_COLUMNS = "app_columns";
+    private static final String KEY_HERO_URI = "hero_image_uri";
+    private static final String KEY_HERO_FADE = "hero_image_fade";
+    private ImageView heroPhoto;
     private boolean favoritesOnly = false;
 
     private final int bg = Color.rgb(13, 17, 15);
@@ -353,6 +358,21 @@ public class MainActivity extends Activity {
         hero.addView(subtitle);
         root.addView(hero);
 
+        LinearLayout photoFrame = new LinearLayout(this);
+        photoFrame.setGravity(Gravity.CENTER);
+        photoFrame.setBackground(shape(panel, 20));
+        heroPhoto = new ImageView(this);
+        heroPhoto.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        photoFrame.addView(heroPhoto, new LinearLayout.LayoutParams(-1, -1));
+        LinearLayout.LayoutParams photoParams = new LinearLayout.LayoutParams(-1, dp(138));
+        photoParams.bottomMargin = dp(14);
+        root.addView(photoFrame, photoParams);
+        loadHeroPhoto();
+        photoFrame.setOnClickListener(v -> chooseHeroPhoto());
+        photoFrame.setOnLongClickListener(v -> { showHeroPhotoOptions(); return true; });
+        photoFrame.setFocusable(true);
+        photoFrame.setContentDescription("Personal banner photo; click to choose, long press for options");
+
         search = new EditText(this);
         search.setSingleLine(true);
         search.setFocusable(true);
@@ -440,11 +460,15 @@ public class MainActivity extends Activity {
             if (!app.label.toLowerCase(Locale.getDefault()).contains(q)) continue;
             if (matches % columns == 0) {
                 row = new LinearLayout(this);
-                row.setGravity(Gravity.TOP);
+                row.setGravity(Gravity.TOP | Gravity.LEFT);
                 row.setPadding(0, dp(3), 0, dp(3));
                 appGrid.addView(row, new LinearLayout.LayoutParams(-1, dp(tvMode ? 132 : 106)));
             }
-            row.addView(appCell(app), new LinearLayout.LayoutParams(0, dp(tvMode ? 124 : 102), 1));
+            if (q.isEmpty()) {
+                row.addView(appCell(app), new LinearLayout.LayoutParams(0, dp(tvMode ? 124 : 102), 1));
+            } else {
+                row.addView(appCell(app), new LinearLayout.LayoutParams(dp(tvMode ? 112 : 84), dp(tvMode ? 124 : 102)));
+            }
             matches++;
         }
         if (matches == 0) {
@@ -879,6 +903,56 @@ public class MainActivity extends Activity {
         if (tvMode) drawerSearch.post(() -> {
             if (appGrid != null) requestInitialTvFocus();
         });
+    }
+
+    private void chooseHeroPhoto() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("image/*");
+        try { startActivityForResult(intent, 731); }
+        catch (Exception e) { Toast.makeText(this, "Photo picker unavailable", Toast.LENGTH_LONG).show(); }
+    }
+
+    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != 731 || resultCode != RESULT_OK || data == null || data.getData() == null) return;
+        Uri uri = data.getData();
+        try { getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION); }
+        catch (Exception ignored) {}
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_HERO_URI, uri.toString()).apply();
+        loadHeroPhoto();
+    }
+
+    private void loadHeroPhoto() {
+        if (heroPhoto == null) return;
+        String value = getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_HERO_URI, null);
+        if (value == null || value.isEmpty()) {
+            heroPhoto.setImageDrawable(null);
+            heroPhoto.setBackground(shape(panel, 20));
+            return;
+        }
+        try {
+            heroPhoto.setImageURI(null);
+            heroPhoto.setImageURI(Uri.parse(value));
+            heroPhoto.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            int fade = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_HERO_FADE, 45);
+            heroPhoto.setImageAlpha(255);
+            heroPhoto.setForeground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                    new int[]{Color.argb(5, 13, 17, 15), Color.argb(fade * 255 / 100, 13, 17, 15)}));
+        } catch (Exception e) { heroPhoto.setImageDrawable(null); }
+    }
+
+    private void showHeroPhotoOptions() {
+        final String[] options = {"Choose / change photo", "Fade: subtle (20%)", "Fade: smooth (45%)", "Fade: strong (70%)", "Remove photo"};
+        new AlertDialog.Builder(this).setTitle("Home banner").setItems(options, (d, which) -> {
+            if (which == 0) { chooseHeroPhoto(); return; }
+            if (which == 4) getSharedPreferences(PREFS, MODE_PRIVATE).edit().remove(KEY_HERO_URI).apply();
+            else {
+                int fade = which == 1 ? 20 : which == 2 ? 45 : 70;
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(KEY_HERO_FADE, fade).apply();
+            }
+            loadHeroPhoto();
+        }).show();
     }
 
     private void showAppearanceSettings() {
